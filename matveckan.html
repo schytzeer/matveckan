@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matveckan · Karlstad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;700&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #F6F3EC; color: #201F1C; font-family: 'Karla', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .display { font-family: 'Space Grotesk', sans-serif; }
+  input:focus, button:focus, select:focus { outline: 2px solid #2f6b46; outline-offset: 2px; }
+  ::selection { background: #2f6b46; color: #fff; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+  button { font-family: inherit; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ============================= DATA ============================= */
+const INGREDIENTS = {
+  "Nötfärs":            { unit: "kg", prices: { ICA: 99,  Coop: 95,  Willys: 85,  Hemköp: 105, Lidl: 79 } },
+  "Kycklinglårfilé":    { unit: "kg", prices: { ICA: 89,  Coop: 85,  Willys: 75,  Hemköp: 92,  Lidl: 69 } },
+  "Laxfilé":            { unit: "kg", prices: { ICA: 189, Coop: 179, Willys: 159, Hemköp: 195, Lidl: 149 } },
+  "Torskfilé":          { unit: "kg", prices: { ICA: 169, Coop: 159, Willys: 145, Hemköp: 175, Lidl: 139 } },
+  "Spagetti":           { unit: "kg", prices: { ICA: 25,  Coop: 24,  Willys: 19,  Hemköp: 27,  Lidl: 15 } },
+  "Ris":                { unit: "kg", prices: { ICA: 22,  Coop: 21,  Willys: 18,  Hemköp: 24,  Lidl: 15 } },
+  "Potatis":            { unit: "kg", prices: { ICA: 15,  Coop: 14,  Willys: 12,  Hemköp: 16,  Lidl: 10 } },
+  "Krossade tomater":   { unit: "st", prices: { ICA: 12,  Coop: 11,  Willys: 9,   Hemköp: 13,  Lidl: 7 } },
+  "Gul lök":            { unit: "kg", prices: { ICA: 18,  Coop: 17,  Willys: 15,  Hemköp: 19,  Lidl: 12 } },
+  "Vitlök":             { unit: "st", prices: { ICA: 8,   Coop: 7,   Willys: 6,   Hemköp: 8,   Lidl: 5 } },
+  "Morötter":           { unit: "kg", prices: { ICA: 16,  Coop: 15,  Willys: 13,  Hemköp: 17,  Lidl: 11 } },
+  "Broccoli":           { unit: "st", prices: { ICA: 22,  Coop: 20,  Willys: 18,  Hemköp: 23,  Lidl: 16 } },
+  "Paprika":            { unit: "st", prices: { ICA: 12,  Coop: 11,  Willys: 10,  Hemköp: 13,  Lidl: 8 } },
+  "Grädde":             { unit: "l",  prices: { ICA: 45,  Coop: 43,  Willys: 38,  Hemköp: 47,  Lidl: 33 } },
+  "Mjölk":              { unit: "l",  prices: { ICA: 12,  Coop: 11.5,Willys: 10,  Hemköp: 12.5,Lidl: 9 } },
+  "Ägg":                { unit: "st", prices: { ICA: 5.5, Coop: 5.2, Willys: 4.5, Hemköp: 5.8, Lidl: 4 } },
+  "Smör":               { unit: "st", prices: { ICA: 55,  Coop: 52,  Willys: 45,  Hemköp: 58,  Lidl: 39 } },
+  "Riven ost":          { unit: "kg", prices: { ICA: 130, Coop: 125, Willys: 110, Hemköp: 135, Lidl: 95 } },
+  "Tacokrydda":         { unit: "st", prices: { ICA: 18,  Coop: 17,  Willys: 15,  Hemköp: 19,  Lidl: 12 } },
+  "Tortillabröd":       { unit: "st", prices: { ICA: 28,  Coop: 26,  Willys: 22,  Hemköp: 29,  Lidl: 18 } },
+  "Kikärtor":           { unit: "st", prices: { ICA: 14,  Coop: 13,  Willys: 11,  Hemköp: 15,  Lidl: 9 } },
+  "Currypasta":         { unit: "st", prices: { ICA: 32,  Coop: 30,  Willys: 26,  Hemköp: 34,  Lidl: 22 } },
+  "Kokosmjölk":         { unit: "st", prices: { ICA: 16,  Coop: 15,  Willys: 13,  Hemköp: 17,  Lidl: 11 } },
+  "Halloumi":           { unit: "st", prices: { ICA: 45,  Coop: 42,  Willys: 38,  Hemköp: 47,  Lidl: 32 } },
+  "Svarta bönor":       { unit: "st", prices: { ICA: 14,  Coop: 13,  Willys: 11,  Hemköp: 15,  Lidl: 9 } },
+  "Röda linser":        { unit: "kg", prices: { ICA: 35,  Coop: 33,  Willys: 28,  Hemköp: 37,  Lidl: 22 } },
+  "Buljong":            { unit: "st", prices: { ICA: 25,  Coop: 23,  Willys: 20,  Hemköp: 26,  Lidl: 16 } },
+  "Vetemjöl":           { unit: "kg", prices: { ICA: 14,  Coop: 13,  Willys: 11,  Hemköp: 15,  Lidl: 9 } },
+};
+
+const STORES = ["ICA", "Coop", "Willys", "Hemköp", "Lidl"];
+const CHAIN_META = [
+  { key: "ica", label: "ICA" },
+  { key: "coop", label: "Coop" },
+  { key: "willys", label: "Willys" },
+  { key: "hemkop", label: "Hemköp" },
+  { key: "lidl", label: "Lidl" },
+];
+const PRIMAT_BASE = "https://primat.nu";
+
+const RECIPES = [
+  { id: "koettfarssas", name: "Köttfärssås med spagetti", note: "Vardagsklassikern.",
+    ingredients: [
+      { name: "Nötfärs", amount: 500, unit: "g" }, { name: "Krossade tomater", amount: 2, unit: "st" },
+      { name: "Gul lök", amount: 150, unit: "g" }, { name: "Vitlök", amount: 2, unit: "st" },
+      { name: "Spagetti", amount: 400, unit: "g" }, { name: "Riven ost", amount: 100, unit: "g" },
+    ]},
+  { id: "kycklinggryta", name: "Kycklinggryta med ris", note: "Krämig och mild.",
+    ingredients: [
+      { name: "Kycklinglårfilé", amount: 600, unit: "g" }, { name: "Ris", amount: 400, unit: "g" },
+      { name: "Grädde", amount: 250, unit: "ml" }, { name: "Gul lök", amount: 150, unit: "g" },
+      { name: "Paprika", amount: 1, unit: "st" }, { name: "Buljong", amount: 1, unit: "st" },
+    ]},
+  { id: "fiskgratang", name: "Fiskgratäng", note: "Torsk, potatis, ost.",
+    ingredients: [
+      { name: "Torskfilé", amount: 600, unit: "g" }, { name: "Potatis", amount: 800, unit: "g" },
+      { name: "Grädde", amount: 300, unit: "ml" }, { name: "Gul lök", amount: 100, unit: "g" },
+      { name: "Riven ost", amount: 100, unit: "g" },
+    ]},
+  { id: "tacos", name: "Tacos", note: "Fredagsfavoriten.",
+    ingredients: [
+      { name: "Nötfärs", amount: 500, unit: "g" }, { name: "Tortillabröd", amount: 1, unit: "st" },
+      { name: "Tacokrydda", amount: 1, unit: "st" }, { name: "Paprika", amount: 1, unit: "st" },
+      { name: "Gul lök", amount: 100, unit: "g" }, { name: "Riven ost", amount: 100, unit: "g" },
+      { name: "Krossade tomater", amount: 1, unit: "st" },
+    ]},
+  { id: "kottbullar", name: "Köttbullar med potatismos", note: "Husmanskost.",
+    ingredients: [
+      { name: "Nötfärs", amount: 500, unit: "g" }, { name: "Potatis", amount: 1000, unit: "g" },
+      { name: "Grädde", amount: 200, unit: "ml" }, { name: "Smör", amount: 0.2, unit: "st" },
+    ]},
+  { id: "curry", name: "Currygryta med kikärtor", note: "Vegetarisk, mättande.",
+    ingredients: [
+      { name: "Kikärtor", amount: 2, unit: "st" }, { name: "Kokosmjölk", amount: 1, unit: "st" },
+      { name: "Currypasta", amount: 1, unit: "st" }, { name: "Ris", amount: 400, unit: "g" },
+      { name: "Gul lök", amount: 150, unit: "g" }, { name: "Paprika", amount: 1, unit: "st" },
+    ]},
+  { id: "lax", name: "Lax med ris och broccoli", note: "Snabb och nyttig.",
+    ingredients: [
+      { name: "Laxfilé", amount: 600, unit: "g" }, { name: "Ris", amount: 400, unit: "g" },
+      { name: "Broccoli", amount: 1, unit: "st" }, { name: "Smör", amount: 0.1, unit: "st" },
+    ]},
+  { id: "pannkakor", name: "Pannkakor", note: "Enkel middag för alla åldrar.",
+    ingredients: [
+      { name: "Vetemjöl", amount: 250, unit: "g" }, { name: "Mjölk", amount: 600, unit: "ml" },
+      { name: "Ägg", amount: 3, unit: "st" }, { name: "Smör", amount: 0.05, unit: "st" },
+    ]},
+  { id: "pytt", name: "Pytt i panna", note: "Perfekt för matrester.",
+    ingredients: [
+      { name: "Potatis", amount: 800, unit: "g" }, { name: "Nötfärs", amount: 300, unit: "g" },
+      { name: "Gul lök", amount: 150, unit: "g" }, { name: "Ägg", amount: 4, unit: "st" },
+    ]},
+  { id: "halloumiwok", name: "Halloumiwok", note: "Vegetarisk, mycket smak.",
+    ingredients: [
+      { name: "Halloumi", amount: 1, unit: "st" }, { name: "Ris", amount: 400, unit: "g" },
+      { name: "Paprika", amount: 1, unit: "st" }, { name: "Broccoli", amount: 1, unit: "st" },
+      { name: "Gul lök", amount: 100, unit: "g" },
+    ]},
+  { id: "chili", name: "Chili con carne", note: "Mustig och prisvärd.",
+    ingredients: [
+      { name: "Nötfärs", amount: 500, unit: "g" }, { name: "Svarta bönor", amount: 1, unit: "st" },
+      { name: "Krossade tomater", amount: 2, unit: "st" }, { name: "Gul lök", amount: 150, unit: "g" },
+      { name: "Paprika", amount: 1, unit: "st" }, { name: "Ris", amount: 300, unit: "g" },
+    ]},
+  { id: "linssoppa", name: "Linssoppa", note: "Billig och mättande.",
+    ingredients: [
+      { name: "Röda linser", amount: 300, unit: "g" }, { name: "Gul lök", amount: 150, unit: "g" },
+      { name: "Morötter", amount: 200, unit: "g" }, { name: "Buljong", amount: 1, unit: "st" },
+      { name: "Krossade tomater", amount: 1, unit: "st" },
+    ]},
+];
+
+const DAYS = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"];
+const BASE_PORTIONS = 4;
+
+/* ============================= HELPERS ============================= */
+function toBaseQty(amount, unit) {
+  if (unit === "g" || unit === "ml") return amount / 1000;
+  return amount;
+}
+function fmtQty(qty, unit) {
+  if (unit === "st") return (qty % 1 === 0 ? qty : qty.toFixed(1)) + " st";
+  if (unit === "kg") return qty < 1 ? Math.round(qty * 1000) + " g" : qty.toFixed(2) + " kg";
+  if (unit === "l") return qty < 1 ? Math.round(qty * 1000) + " ml" : qty.toFixed(2) + " l";
+  return String(qty);
+}
+function kr(n) { return n.toLocaleString("sv-SE", { maximumFractionDigits: 0 }) + " kr"; }
+function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function zigzag(teeth) {
+  const pts = ["0% 0%", "100% 0%"];
+  for (let i = 0; i <= teeth; i++) {
+    const x = 100 - (i / teeth) * 100;
+    const y = i % 2 === 0 ? "100%" : "calc(100% - 9px)";
+    pts.push(x + "% " + y);
+  }
+  return "polygon(" + pts.join(",") + ")";
+}
+async function mapLimit(items, limit, fn) {
+  const ret = new Array(items.length);
+  let idx = 0;
+  async function worker() {
+    while (idx < items.length) {
+      const cur = idx++;
+      ret[cur] = await fn(items[cur], cur);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return ret;
+}
+
+/* ============================= STATE ============================= */
+function seedPrices() {
+  const clone = {};
+  Object.entries(INGREDIENTS).forEach(([k, v]) => { clone[k] = { ...v.prices }; });
+  return clone;
+}
+function seedMeta() {
+  const clone = {};
+  Object.keys(INGREDIENTS).forEach((k) => { clone[k] = {}; STORES.forEach((s) => { clone[k][s] = "estimated"; }); });
+  return clone;
+}
+
+const state = {
+  people: 2,
+  weekPlan: Array(7).fill(null),
+  pickerDay: null,
+  showList: false,
+  showPrices: false,
+  showConnect: true,
+  prices: seedPrices(),
+  priceMeta: seedMeta(),
+  karlstadStores: null,
+  selectedStores: {},
+  storesLoading: true,
+  storesError: null,
+  apiKey: "",
+  email: "",
+  keyInputVal: "",
+  keyStatus: "",
+  keyError: "",
+  fetching: false,
+  fetchProgress: { done: 0, total: 0 },
+  fetchError: null,
+  lastFetched: null,
+};
+
+/* ============================= DERIVED ============================= */
+function computeAggregated() {
+  const factor = state.people / BASE_PORTIONS;
+  const map = {};
+  state.weekPlan.forEach((id) => {
+    if (!id) return;
+    const recipe = RECIPES.find((r) => r.id === id);
+    recipe.ingredients.forEach((ing) => {
+      const base = INGREDIENTS[ing.name].unit;
+      const qty = toBaseQty(ing.amount, ing.unit) * factor;
+      if (!map[ing.name]) map[ing.name] = { qty: 0, unit: base };
+      map[ing.name].qty += qty;
+    });
+  });
+  return Object.entries(map).map(([name, v]) => ({ name, ...v })).sort((a, b) => a.name.localeCompare(b.name, "sv"));
+}
+function computeTotals(aggregated) {
+  const t = {};
+  STORES.forEach((s) => { t[s] = 0; });
+  aggregated.forEach((item) => { STORES.forEach((s) => { t[s] += item.qty * state.prices[item.name][s]; }); });
+  return STORES.map((s) => ({ store: s, total: t[s] })).sort((a, b) => a.total - b.total);
+}
+
+/* ============================= ACTIONS ============================= */
+async function loadStores() {
+  state.storesLoading = true;
+  state.storesError = null;
+  render();
+  try {
+    const res = await fetch(PRIMAT_BASE + "/api/v3/demo/stores/resolve?place=Karlstad");
+    const data = await res.json();
+    if (!res.ok) throw new Error((data && data.error && data.error.message) || "Kunde inte hämta butiker.");
+    const grouped = {};
+    CHAIN_META.forEach((c) => { grouped[c.key] = []; });
+    (data.stores || []).forEach((s) => { if (grouped[s.chain]) grouped[s.chain].push(s); });
+    Object.values(grouped).forEach((arr) => arr.sort((a, b) => (a.km ?? 0) - (b.km ?? 0)));
+    state.karlstadStores = grouped;
+    const sel = {};
+    CHAIN_META.forEach((c) => { if (grouped[c.key] && grouped[c.key].length) sel[c.key] = grouped[c.key][0].store_id; });
+    state.selectedStores = sel;
+  } catch (e) {
+    state.storesError = "Kunde inte hämta butiker i Karlstad just nu (" + e.message + "). Prisjämförelsen fortsätter fungera med redigerbara priser.";
+  } finally {
+    state.storesLoading = false;
+    render();
+  }
+}
+
+async function handleSignup() {
+  if (!state.email) return;
+  state.keyStatus = "creating";
+  state.keyError = "";
+  render();
+  try {
+    const res = await fetch(PRIMAT_BASE + "/api/v3/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: state.email }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      state.keyStatus = "error";
+      state.keyError = (data && data.error && data.error.message) || "Något gick fel vid registreringen.";
+      render();
+      return;
+    }
+    state.apiKey = data.api_key;
+    state.keyStatus = "created";
+    fetch(PRIMAT_BASE + "/api/v3/confirm/request", { method: "POST", headers: { Authorization: "Bearer " + data.api_key } }).catch(() => {});
+  } catch (e) {
+    state.keyStatus = "error";
+    state.keyError = "Kunde inte nå Primat just nu (" + e.message + ").";
+  }
+  render();
+}
+
+async function handleFetchPrices() {
+  const aggregated = computeAggregated();
+  if (aggregated.length === 0) return;
+  state.fetching = true;
+  state.fetchError = null;
+  state.fetchProgress = { done: 0, total: aggregated.length };
+  render();
+
+  const storesParam = CHAIN_META.map((c) => (state.selectedStores[c.key] ? c.key + ":" + state.selectedStores[c.key] : null)).filter(Boolean).join(",");
+  const newPrices = JSON.parse(JSON.stringify(state.prices));
+  const newMeta = JSON.parse(JSON.stringify(state.priceMeta));
+  let stop = false, stopReason = null;
+
+  await mapLimit(aggregated, 3, async (item) => {
+    if (stop) return;
+    try {
+      const url = state.apiKey && storesParam
+        ? PRIMAT_BASE + "/api/v3/products?q=" + encodeURIComponent(item.name) + "&stores=" + encodeURIComponent(storesParam) + "&limit=25"
+        : PRIMAT_BASE + "/api/v3/demo/products?q=" + encodeURIComponent(item.name);
+      const headers = state.apiKey ? { Authorization: "Bearer " + state.apiKey } : {};
+      const res = await fetch(url, { headers });
+      const data = await res.json();
+      if (res.status === 429) {
+        stop = true;
+        stopReason = (data && data.error && data.error.message) || "Prisbudgeten är slut för tillfället.";
+        return;
+      }
+      if (!res.ok) return;
+      const rows = data.data || [];
+      CHAIN_META.forEach(({ key, label }) => {
+        const match = rows.find((r) => r.chain === key && r.prices && r.prices.comparison && r.prices.comparison.unit === INGREDIENTS[item.name].unit);
+        if (match) {
+          newPrices[item.name][label] = match.prices.comparison.price;
+          newMeta[item.name][label] = "primat";
+        }
+      });
+    } catch (e) {
+      // leave item untouched on network error
+    } finally {
+      state.fetchProgress = { done: state.fetchProgress.done + 1, total: state.fetchProgress.total };
+      render();
+    }
+  });
+
+  state.prices = newPrices;
+  state.priceMeta = newMeta;
+  state.fetching = false;
+  state.lastFetched = new Date();
+  if (stopReason) state.fetchError = stopReason;
+  render();
+}
+
+function updatePrice(name, store, val) {
+  const num = parseFloat(val);
+  state.prices[name][store] = isNaN(num) ? 0 : num;
+  state.priceMeta[name][store] = "manual";
+  render();
+}
+
+/* ============================= RENDER ============================= */
+const dotColor = (source) => source === "primat" ? "#2f6b46" : source === "manual" ? "#3b5bdb" : "#c9c4b3";
+const dotTitle = (source) => source === "primat" ? "Hämtat från Primat" : source === "manual" ? "Manuellt ändrat" : "Uppskattat (ej hämtat)";
+
+function renderStoresSection() {
+  if (state.storesLoading) {
+    return `<section style="margin-bottom:28px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span class="display" style="font-size:15px;font-weight:700">🏬 Dina butiker i Karlstad</span></div>
+      <div style="font-size:13px;color:#85806f;display:flex;align-items:center;gap:6px"><span class="spin">↻</span> Hämtar butiker i Karlstad från Primat…</div>
+    </section>`;
+  }
+  if (state.storesError) {
+    return `<section style="margin-bottom:28px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span class="display" style="font-size:15px;font-weight:700">🏬 Dina butiker i Karlstad</span></div>
+      <div style="font-size:13px;color:#a3402c">⚠ ${esc(state.storesError)}</div>
+    </section>`;
+  }
+  const cards = CHAIN_META.map(({ key, label }) => {
+    const options = (state.karlstadStores && state.karlstadStores[key]) || [];
+    if (options.length === 0) {
+      return `<div style="background:#fff;border:1px solid #efece1;border-radius:8px;padding:8px 10px;font-size:12px;color:#c9c4b3">${label} — ingen butik hittad</div>`;
+    }
+    if (options.length > 1) {
+      const opts = options.map((o) => `<option value="${esc(o.store_id)}" ${state.selectedStores[key] === o.store_id ? "selected" : ""}>${esc(o.name)}${o.km != null ? " · " + o.km.toFixed(1) + " km" : ""}</option>`).join("");
+      return `<div style="background:#fff;border:1px solid #d9d4c5;border-radius:8px;padding:8px 10px">
+        <div class="mono" style="font-size:10px;color:#85806f;text-transform:uppercase;margin-bottom:3px">${label}</div>
+        <select data-action="select-store" data-chain="${key}" style="width:100%;font-size:12px;border:none;background:transparent;padding:0">${opts}</select>
+      </div>`;
+    }
+    return `<div style="background:#fff;border:1px solid #d9d4c5;border-radius:8px;padding:8px 10px">
+      <div class="mono" style="font-size:10px;color:#85806f;text-transform:uppercase;margin-bottom:3px">${label}</div>
+      <div style="font-size:12px">${esc(options[0].name)}</div>
+    </div>`;
+  }).join("");
+  return `<section style="margin-bottom:28px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span class="display" style="font-size:15px;font-weight:700">🏬 Dina butiker i Karlstad</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${cards}</div>
+  </section>`;
+}
+
+function renderConnectSection() {
+  let body;
+  if (state.apiKey) {
+    body = `<div style="display:flex;align-items:center;gap:6px;font-size:13px;color:#2f6b46;background:#fff;border:1px solid #d9d4c5;border-radius:10px;padding:10px 12px">
+      ✓ Konto anslutet — priser hämtas butiksexakt för butikerna du valt ovan.
+    </div>`;
+  } else if (state.showConnect) {
+    body = `<div style="background:#fff;border:1px solid #d9d4c5;border-radius:10px;padding:14px;font-size:13px">
+      <p style="color:#5c5849;margin-top:0;margin-bottom:10px">Skriv din mejl så skapas en gratis Primat-nyckel direkt — ingen väntan på bekräftelsemejl krävs för att börja använda den. Med en nyckel hämtas priser exakt för dina valda Karlstad-butiker. Utan nyckel används Primats nationella demoläge.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <input type="email" placeholder="din@mejl.se" data-field="email" value="${esc(state.email)}" id="email-input" style="flex:1;min-width:180px;border:1px solid #d9d4c5;border-radius:6px;padding:7px 10px;font-size:13px">
+        <button data-action="signup" ${state.keyStatus === "creating" || !state.email ? "disabled" : ""} style="background:#201F1C;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:13px;cursor:pointer">${state.keyStatus === "creating" ? "Skapar…" : "Skapa gratis nyckel"}</button>
+      </div>
+      ${state.keyStatus === "created" ? `<p style="color:#2f6b46;margin:6px 0 0">✓ Nyckel skapad och redo att användas. Kolla din mejl på ${esc(state.email)} och klicka i länken för att göra den permanent (den provisoriska nyckeln funkar i 7 dagar direkt).</p>` : ""}
+      ${state.keyStatus === "error" ? `<p style="color:#a3402c;margin:6px 0 0">${esc(state.keyError)}</p>` : ""}
+      <div style="border-top:1px solid #efece1;margin-top:10px;padding-top:10px">
+        <span style="color:#85806f">Har du redan en nyckel från </span><a href="https://primat.nu/data" target="_blank" rel="noopener noreferrer" style="color:#3b5bdb">primat.nu/data</a><span style="color:#85806f">?</span>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input type="text" placeholder="primat_live_… eller primat_pk_…" data-field="keyInputVal" value="${esc(state.keyInputVal)}" id="key-input" style="flex:1;min-width:180px;border:1px solid #d9d4c5;border-radius:6px;padding:7px 10px;font-size:13px">
+          <button data-action="use-key" style="background:#f1efe7;border:1px solid #d9d4c5;border-radius:6px;padding:7px 12px;font-size:13px;cursor:pointer">Använd</button>
+        </div>
+      </div>
+      <button data-action="skip-connect" style="margin-top:10px;background:none;border:none;color:#85806f;font-size:12px;cursor:pointer;padding:0;text-decoration:underline">Hoppa över för nu</button>
+    </div>`;
+  } else {
+    body = `<div style="display:flex;align-items:center;gap:10px;font-size:13px;color:#85806f">
+      <span>Inte anslutet — priser hämtas via Primats nationella demoläge tills du ansluter ett konto.</span>
+      <button data-action="open-connect" style="background:none;border:none;color:#3b5bdb;font-size:13px;cursor:pointer;padding:0">Anslut nu</button>
+    </div>`;
+  }
+  return `<section style="margin-bottom:28px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span class="display" style="font-size:15px;font-weight:700">🔗 Anslut ditt Primat-konto</span></div>
+    ${body}
+  </section>`;
+}
+
+function renderPeopleSection() {
+  return `<section style="display:flex;align-items:center;gap:14px;margin-bottom:28px">
+    <span>👥</span><span style="font-size:14px;color:#5c5849">Antal personer per middag</span>
+    <div style="display:flex;align-items:center;border:1px solid #d9d4c5;border-radius:8px;overflow:hidden">
+      <button data-action="people-dec" style="width:32px;height:32px;background:#fff;border:none;cursor:pointer;font-size:16px">−</button>
+      <span class="mono" style="width:32px;text-align:center;font-weight:700;display:inline-block">${state.people}</span>
+      <button data-action="people-inc" style="width:32px;height:32px;background:#fff;border:none;cursor:pointer;font-size:16px">+</button>
+    </div>
+  </section>`;
+}
+
+function renderWeekSection() {
+  const rows = DAYS.map((day, i) => {
+    const recipe = state.weekPlan[i] ? RECIPES.find((r) => r.id === state.weekPlan[i]) : null;
+    let dayHtml;
+    if (recipe) {
+      dayHtml = `<div style="display:flex;align-items:center;justify-content:space-between;flex:1;gap:8px">
+        <div><div style="font-weight:700;font-size:14px">${esc(recipe.name)}</div><div style="font-size:12px;color:#85806f">${esc(recipe.note)}</div></div>
+        <div style="display:flex;gap:6px">
+          <button data-action="toggle-picker" data-day="${i}" style="font-size:12px;background:#f1efe7;border:1px solid #d9d4c5;border-radius:6px;padding:5px 8px;cursor:pointer">Byt</button>
+          <button data-action="remove-day" data-day="${i}" style="background:none;border:none;cursor:pointer;color:#85806f;padding:4px">✕</button>
+        </div>
+      </div>`;
+    } else {
+      dayHtml = `<button data-action="toggle-picker" data-day="${i}" style="flex:1;display:flex;align-items:center;gap:6px;background:none;border:1px dashed #c9c4b3;border-radius:8px;padding:8px 10px;cursor:pointer;color:#5c5849;font-size:13px">+ Lägg till rätt</button>`;
+    }
+    const picker = state.pickerDay === i ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;background:#f1efe7;border:1px solid #d9d4c5;border-top:none;border-radius:0 0 10px 10px;padding:10px;margin-top:-1px">
+      ${RECIPES.map((r) => `<button data-action="set-day" data-day="${i}" data-recipe="${r.id}" style="text-align:left;background:#fff;border:1px solid #d9d4c5;border-radius:8px;padding:8px 10px;cursor:pointer">
+        <div style="font-size:13px;font-weight:700">🍳 ${esc(r.name)}</div>
+        <div style="font-size:11px;color:#85806f;margin-top:2px">${esc(r.note)}</div>
+      </button>`).join("")}
+    </div>` : "";
+    return `<div>
+      <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #d9d4c5;border-radius:10px;padding:10px 12px">
+        <span class="mono" style="font-size:11px;color:#85806f;text-transform:uppercase;width:70px;flex-shrink:0">${day}</span>
+        ${dayHtml}
+      </div>
+      ${picker}
+    </div>`;
+  }).join("");
+  return `<section style="margin-bottom:32px">
+    <h2 class="display" style="font-size:18px;font-weight:700;margin-bottom:12px">Veckans middagar</h2>
+    <div style="display:flex;flex-direction:column;gap:8px">${rows}</div>
+  </section>`;
+}
+
+function renderShoppingListSection(aggregated) {
+  if (aggregated.length === 0) return "";
+  const rows = aggregated.map((item, idx) => `<div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:${idx < aggregated.length - 1 ? "1px solid #efece1" : "none"};font-size:14px">
+    <span>${esc(item.name)}</span><span class="mono" style="color:#5c5849">${fmtQty(item.qty, item.unit)}</span>
+  </div>`).join("");
+  return `<section style="margin-bottom:32px">
+    <button data-action="toggle-list" class="display" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:0;font-size:18px;font-weight:700">
+      Inköpslista (${aggregated.length} varor) ${state.showList ? "▾" : "▸"}
+    </button>
+    ${state.showList ? `<div style="margin-top:12px;background:#fff;border:1px solid #d9d4c5;border-radius:10px;padding:4px">${rows}</div>` : ""}
+  </section>`;
+}
+
+function renderComparisonSection(aggregated) {
+  const plannedCount = state.weekPlan.filter(Boolean).length;
+  const totals = computeTotals(aggregated);
+  const cheapest = totals[0], priciest = totals[totals.length - 1];
+  const maxTotal = priciest ? priciest.total : 1;
+  const primatCount = aggregated.filter((item) => STORES.some((s) => state.priceMeta[item.name][s] === "primat")).length;
+
+  const controls = aggregated.length > 0 ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+    <button data-action="fetch-prices" ${state.fetching || state.storesLoading ? "disabled" : ""} style="display:flex;align-items:center;gap:6px;background:#2f6b46;color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:700;cursor:${state.fetching ? "default" : "pointer"};opacity:${state.fetching || state.storesLoading ? 0.7 : 1}">
+      <span class="${state.fetching ? "spin" : ""}">↻</span> ${state.fetching ? `Hämtar priser… (${state.fetchProgress.done}/${state.fetchProgress.total})` : "Hämta priser från Primat"}
+    </button>
+    ${state.lastFetched && !state.fetching ? `<span style="font-size:12px;color:#85806f">${primatCount} av ${aggregated.length} varor från Primat · uppdaterad ${state.lastFetched.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}</span>` : ""}
+    ${state.apiKey ? `<span style="display:flex;align-items:center;gap:4px;font-size:12px;color:#2f6b46">✓ Primat-konto anslutet</span>` : ""}
+  </div>` : "";
+
+  const errorHtml = state.fetchError ? `<div style="display:flex;gap:6px;font-size:12px;color:#a3402c;margin-bottom:12px">⚠ ${esc(state.fetchError)}</div>` : "";
+
+  let body;
+  if (aggregated.length === 0) {
+    body = `<div style="background:#fff;border:1px dashed #c9c4b3;border-radius:12px;padding:32px 20px;text-align:center;color:#85806f">Din vecka är tom. Lägg till minst en rätt ovan för att se vad den skulle kosta i respektive butik.</div>`;
+  } else {
+    const receipts = totals.map(({ store, total }) => {
+      const isCheapest = store === cheapest.store;
+      return `<div style="position:relative;flex:0 0 148px">
+        ${isCheapest ? `<div class="mono" style="position:absolute;top:-12px;right:-10px;background:#2f6b46;color:#fff;font-size:10px;font-weight:700;padding:4px 7px;border-radius:4px;transform:rotate(6deg);letter-spacing:0.06em;z-index:2;box-shadow:0 2px 4px rgba(0,0,0,0.15)">BÄST PRIS</div>` : ""}
+        <div style="background:#fff;border:${isCheapest ? "1.5px solid #2f6b46" : "1px solid #d9d4c5"};border-radius:6px 6px 0 0;padding:16px 12px 20px;clip-path:${zigzag(9)}">
+          <div class="mono" style="font-size:11px;letter-spacing:0.08em;color:#85806f;text-transform:uppercase">${store}</div>
+          <div class="display" style="font-size:22px;font-weight:700;margin:6px 0 2px;color:${isCheapest ? "#2f6b46" : "#201F1C"}">${kr(total)}</div>
+          <div style="font-size:11px;color:#85806f">${plannedCount > 0 ? kr(total / plannedCount) + " / middag" : ""}</div>
+        </div>
+      </div>`;
+    }).join("");
+    const bars = totals.map(({ store, total }) => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="width:58px;font-size:12px;color:#5c5849;flex-shrink:0">${store}</span>
+      <div style="flex:1;background:#f1efe7;border-radius:4px;height:14px;overflow:hidden">
+        <div style="width:${(total / maxTotal) * 100}%;height:100%;background:${store === cheapest.store ? "#2f6b46" : "#c9c4b3"};border-radius:4px"></div>
+      </div>
+      <span class="mono" style="width:60px;text-align:right;font-size:12px">${kr(total)}</span>
+    </div>`).join("");
+    const diff = priciest && cheapest && priciest.total > cheapest.total ? `<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;color:#2f6b46">↓ <span>${cheapest.store} är ${kr(priciest.total - cheapest.total)} billigare än ${priciest.store} den här veckan.</span></div>` : "";
+    body = `<div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:12px;padding-top:6px">${receipts}</div>
+      <div style="background:#fff;border:1px solid #d9d4c5;border-radius:10px;padding:14px;margin-top:4px">${bars}</div>
+      ${diff}`;
+  }
+
+  return `<section>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+      <h2 class="display" style="font-size:18px;font-weight:700">Prisjämförelse</h2>
+      ${plannedCount > 0 ? `<span style="font-size:12px;color:#85806f">${plannedCount} av 7 middagar planerade</span>` : ""}
+    </div>
+    ${controls}
+    ${errorHtml}
+    ${body}
+  </section>`;
+}
+
+function renderPriceEditorSection() {
+  const rows = Object.entries(INGREDIENTS).map(([name, info]) => {
+    const cells = STORES.map((s) => `<td style="padding:4px 6px">
+      <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">
+        <span title="${dotTitle(state.priceMeta[name][s])}" style="width:7px;height:7px;border-radius:4px;background:${dotColor(state.priceMeta[name][s])};flex-shrink:0"></span>
+        <input type="number" class="mono" data-action="edit-price" data-name="${esc(name)}" data-store="${s}" value="${state.prices[name][s]}" style="width:52px;text-align:right;border:1px solid #d9d4c5;border-radius:4px;padding:3px 4px">
+      </div>
+    </td>`).join("");
+    return `<tr style="border-top:1px solid #efece1"><td style="padding:6px 10px;white-space:nowrap;position:sticky;left:0;background:#fff">${esc(name)} <span style="color:#85806f">/${info.unit}</span></td>${cells}</tr>`;
+  }).join("");
+  const legend = `<div style="display:flex;gap:14px;font-size:11px;color:#85806f;margin-bottom:8px">
+    <span><span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:#2f6b46;margin-right:4px"></span>Primat</span>
+    <span><span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:#3b5bdb;margin-right:4px"></span>Manuellt</span>
+    <span><span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:#c9c4b3;margin-right:4px"></span>Uppskattat</span>
+  </div>`;
+  return `<section style="margin-top:32px">
+    <button data-action="toggle-prices" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:0;font-size:14px;color:#5c5849">⚙ Visa/redigera priser ${state.showPrices ? "▾" : "▸"}</button>
+    ${state.showPrices ? `<div style="margin-top:12px">${legend}<div style="background:#fff;border:1px solid #d9d4c5;border-radius:10px;overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr style="background:#f1efe7"><th style="text-align:left;padding:8px 10px;position:sticky;left:0;background:#f1efe7">Vara</th>${STORES.map((s) => `<th style="padding:8px 10px;text-align:right">${s}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div></div>` : ""}
+  </section>`;
+}
+
+function render() {
+  const active = document.activeElement;
+  const activeId = active && active.id;
+  const selStart = active && "selectionStart" in active ? active.selectionStart : null;
+  const selEnd = active && "selectionEnd" in active ? active.selectionEnd : null;
+
+  const aggregated = computeAggregated();
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    <header style="border-bottom:1px solid #d9d4c5;padding:20px 20px 16px">
+      <div style="max-width:880px;margin:0 auto">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span class="mono" style="font-size:12px;letter-spacing:0.14em;color:#85806f;text-transform:uppercase">🧺 Matveckan · Karlstad</span>
+        </div>
+        <h1 class="display" style="font-size:32px;font-weight:700;margin:4px 0 6px;line-height:1.1">Vad kostar din vecka?</h1>
+        <p style="color:#5c5849;font-size:15px;max-width:520px">Planera veckans middagar och se direkt vad kassan slår på hos ICA, Coop, Willys, Hemköp och Lidl — med riktiga priser från Primat.</p>
+      </div>
+    </header>
+    <main style="max-width:880px;margin:0 auto;padding:28px 20px 60px">
+      ${renderStoresSection()}
+      ${renderConnectSection()}
+      ${renderPeopleSection()}
+      ${renderWeekSection()}
+      ${renderShoppingListSection(aggregated)}
+      ${renderComparisonSection(aggregated)}
+      ${renderPriceEditorSection()}
+      <footer style="margin-top:40px;display:flex;gap:8px;font-size:12px;color:#85806f;line-height:1.5">
+        <span>ℹ</span>
+        <p>Priser märkta med grön prick är hämtade live från <a href="https://primat.nu" target="_blank" rel="noopener noreferrer" style="color:#5c5849">Prisdata från primat.nu</a>. Grå prickar är oförändrade uppskattningar (tryck på "Hämta priser från Primat" ovan) och blå är dina egna ändringar. Receptbiblioteket är en startlista på ${RECIPES.length} vardagsrätter — egna rätter är ett naturligt nästa steg.</p>
+      </footer>
+    </main>
+  `;
+
+  if (activeId) {
+    const el = document.getElementById(activeId);
+    if (el) {
+      el.focus();
+      if (selStart != null && el.setSelectionRange) {
+        try { el.setSelectionRange(selStart, selEnd); } catch (e) {}
+      }
+    }
+  }
+}
+
+/* ============================= EVENTS ============================= */
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  const action = el.dataset.action;
+  if (action === "toggle-picker") {
+    const day = parseInt(el.dataset.day, 10);
+    state.pickerDay = state.pickerDay === day ? null : day;
+    render();
+  } else if (action === "remove-day") {
+    state.weekPlan[parseInt(el.dataset.day, 10)] = null;
+    render();
+  } else if (action === "set-day") {
+    state.weekPlan[parseInt(el.dataset.day, 10)] = el.dataset.recipe;
+    state.pickerDay = null;
+    render();
+  } else if (action === "people-inc") {
+    state.people = Math.min(8, state.people + 1);
+    render();
+  } else if (action === "people-dec") {
+    state.people = Math.max(1, state.people - 1);
+    render();
+  } else if (action === "toggle-list") {
+    state.showList = !state.showList;
+    render();
+  } else if (action === "toggle-prices") {
+    state.showPrices = !state.showPrices;
+    render();
+  } else if (action === "open-connect") {
+    state.showConnect = true;
+    render();
+  } else if (action === "skip-connect") {
+    state.showConnect = false;
+    render();
+  } else if (action === "signup") {
+    handleSignup();
+  } else if (action === "use-key") {
+    const val = document.getElementById("key-input").value.trim();
+    if (val) { state.apiKey = val; state.showConnect = false; render(); }
+  } else if (action === "fetch-prices") {
+    handleFetchPrices();
+  }
+});
+
+document.addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.dataset && el.dataset.field === "email") {
+    state.email = el.value;
+  } else if (el.dataset && el.dataset.field === "keyInputVal") {
+    state.keyInputVal = el.value;
+  } else if (el.dataset && el.dataset.action === "edit-price") {
+    updatePrice(el.dataset.name, el.dataset.store, el.value);
+    return; // updatePrice already renders
+  }
+});
+
+document.addEventListener("change", (e) => {
+  const el = e.target;
+  if (el.dataset && el.dataset.action === "select-store") {
+    state.selectedStores[el.dataset.chain] = el.value;
+    render();
+  }
+});
+
+/* ============================= INIT ============================= */
+render();
+loadStores();
+</script>
+</body>
+</html>
