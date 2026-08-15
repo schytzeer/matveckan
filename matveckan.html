@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matveckan · Karlstad</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;700&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #F6F3EC; color: #201F1C; font-family: 'Karla', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .display { font-family: 'Space Grotesk', sans-serif; }
+  input:focus, button:focus, select:focus { outline: 2px solid #2f6b46; outline-offset: 2px; }
+  ::selection { background: #2f6b46; color: #fff; }
+  #map { height: 100vh; position: fixed; width: calc(100% - 380px); right: 0; top: 0; z-index: 0; }
+  #sidebar { position: fixed; left: 0; top: 0; width: 380px; height: 100vh; background: #F6F3EC; border-right: 1px solid #d9d4c5; overflow-y: auto; z-index: 100; padding: 20px; }
+  #sidebar h1 { font-size: 20px; margin: 0 0 10px 0; }
+  .section { margin-bottom: 20px; padding: 12px; background: #fff; border: 1px solid #d9d4c5; border-radius: 8px; }
+  .section h3 { margin: 0 0 10px 0; font-size: 14px; font-weight: 700; }
+  button { font-family: inherit; cursor: pointer; background: #2f6b46; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-size: 13px; font-weight: 700; }
+  button:hover { opacity: 0.9; }
+  button.secondary { background: #f1efe7; color: #5c5849; border: 1px solid #d9d4c5; }
+  input, select { border: 1px solid #d9d4c5; border-radius: 6px; padding: 6px; font-size: 13px; font-family: inherit; }
+  .store-price { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #f1efe7; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
+  .store-price .rank { font-weight: 700; color: #2f6b46; width: 24px; text-align: center; font-size: 16px; }
+  .store-price .name { flex: 1; margin: 0 8px; }
+  .store-price .price { font-weight: 700; color: #201F1C; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1 class="display">🧺 Matveckan</h1>
+  
+  <div class="section">
+    <h3>👥 Antal personer</h3>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button class="secondary" style="width: 32px; padding: 0;" data-action="people-dec">−</button>
+      <span class="mono" style="flex: 1; text-align: center; font-weight: 700; font-size: 18px;" id="people-count">2</span>
+      <button class="secondary" style="width: 32px; padding: 0;" data-action="people-inc">+</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>🍽️ Vecka</h3>
+    <button data-action="toggle-recipes">+ Lägg till rätt</button>
+    <div id="recipes-list" style="margin-top: 10px; font-size: 12px;"></div>
+  </div>
+
+  <div class="section">
+    <h3>🛒 Egna varor</h3>
+    <button data-action="toggle-items">+ Ny vara</button>
+    <div id="items-list" style="margin-top: 10px; font-size: 12px;"></div>
+  </div>
+
+  <div class="section">
+    <h3>📋 Inköpslista</h3>
+    <div id="shopping-list" style="font-size: 12px; color: #85806f;">Tom</div>
+  </div>
+
+  <div class="section">
+    <h3>💰 Prisjämförelse</h3>
+    <div id="price-list" style="font-size: 12px;"></div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="recipe-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; padding: 20px; overflow-y: auto;">
+  <div style="background: #fff; border-radius: 10px; padding: 20px; max-width: 400px; margin: 40px auto;">
+    <h2 class="display" style="margin-top: 0;">Välj rätt</h2>
+    <div id="recipe-options" style="display: grid; gap: 8px; margin-bottom: 16px;"></div>
+    <button data-action="close-modal" class="secondary">Stäng</button>
+  </div>
+</div>
+
+<div id="item-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; padding: 20px; overflow-y: auto;">
+  <div style="background: #fff; border-radius: 10px; padding: 20px; max-width: 400px; margin: 40px auto;">
+    <h2 class="display" style="margin-top: 0;">Lägg till egen vara</h2>
+    <div style="margin-bottom: 10px;">
+      <label style="display: block; font-size: 12px; color: #85806f; margin-bottom: 4px;">Namn</label>
+      <input type="text" id="new-item-name" placeholder="T.ex. Handtvål" style="width: 100%;">
+    </div>
+    <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+      <div style="flex: 1;">
+        <label style="display: block; font-size: 12px; color: #85806f; margin-bottom: 4px;">Butik</label>
+        <select id="new-item-store" style="width: 100%;">
+          <option>ICA</option>
+          <option>Coop</option>
+          <option>Willys</option>
+          <option>Hemköp</option>
+          <option>Lidl</option>
+        </select>
+      </div>
+      <div style="flex: 1;">
+        <label style="display: block; font-size: 12px; color: #85806f; margin-bottom: 4px;">Pris (kr)</label>
+        <input type="number" id="new-item-price" placeholder="0" style="width: 100%;">
+      </div>
+    </div>
+    <button data-action="save-item">Spara</button>
+    <button class="secondary" data-action="close-modal" style="margin-left: 8px;">Avbryt</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const STORES = [
+  { chain: "ICA", name: "Maxi ICA Stormarknad Välsviken", lat: 59.39624, lng: 13.58037, address: "Rävbergsvägen 2, 656 39" },
+  { chain: "ICA", name: "ICA Maxi Bergvik", lat: 59.37747, lng: 13.42485, address: "Frykmans väg 3, 653 46" },
+  { chain: "Coop", name: "Stora Coop Bergvik", lat: 59.37733, lng: 13.42584, address: "Frykmans väg 1, 653 46" },
+  { chain: "Coop", name: "Stora Coop Välsviken", lat: 59.39620, lng: 13.58045, address: "Rävbergsvägen 15, 656 39" },
+  { chain: "Coop", name: "Stora Coop Hammarö", lat: 59.30850, lng: 13.54850, address: "Bivägen 7, 663 41" },
+  { chain: "ICA", name: "ICA Kvantum Hammarö", lat: 59.30880, lng: 13.54880, address: "Bivägen 11, 663 41" },
+  { chain: "Willys", name: "Willys Karlstad Våxnäs", lat: 59.33515, lng: 13.51265, address: "Ramgatan 4, 653 41" },
+  { chain: "Willys", name: "Willys Karlstad Brygudden", lat: 59.32880, lng: 13.50620, address: "Bergendorffsgatan 5, 652 16" },
+  { chain: "Willys", name: "Willys Karlstad Skåre", lat: 59.34150, lng: 13.44450, address: "Fjärrviksvägen 1, Skåre" },
+  { chain: "Lidl", name: "Lidl Östra Infarten", lat: 59.34260, lng: 13.51880, address: "Östra Infarten 19, 654 61" },
+  { chain: "Lidl", name: "Lidl Våxnäs", lat: 59.33490, lng: 13.51245, address: "Rattgatan 10, 653 41" },
+  { chain: "Hemköp", name: "Hemköp Karlstad C", lat: 59.32620, lng: 13.50220, address: "Drottninggatan 33, 652 25" },
+];
+
+const INGREDIENTS = {
+  "Nötfärs": { unit: "kg", prices: { ICA: 119, Coop: 109, Willys: 99, Hemköp: 125, Lidl: 89 } },
+  "Kycklinglårfilé": { unit: "kg", prices: { ICA: 109, Coop: 99, Willys: 89, Hemköp: 115, Lidl: 79 } },
+  "Laxfilé": { unit: "kg", prices: { ICA: 199, Coop: 189, Willys: 169, Hemköp: 209, Lidl: 159 } },
+  "Spagetti": { unit: "kg", prices: { ICA: 29, Coop: 27, Willys: 23, Hemköp: 31, Lidl: 19 } },
+  "Ris": { unit: "kg", prices: { ICA: 26, Coop: 24, Willys: 21, Hemköp: 28, Lidl: 18 } },
+  "Potatis": { unit: "kg", prices: { ICA: 18, Coop: 16, Willys: 14, Hemköp: 19, Lidl: 12 } },
+  "Krossade tomater": { unit: "st", prices: { ICA: 15, Coop: 13, Willys: 11, Hemköp: 16, Lidl: 9 } },
+  "Gul lök": { unit: "kg", prices: { ICA: 21, Coop: 19, Willys: 17, Hemköp: 22, Lidl: 14 } },
+  "Grädde": { unit: "l", prices: { ICA: 52, Coop: 49, Willys: 45, Hemköp: 54, Lidl: 39 } },
+  "Mjölk": { unit: "l", prices: { ICA: 14, Coop: 13, Willys: 12, Hemköp: 15, Lidl: 10 } },
+  "Ägg": { unit: "st", prices: { ICA: 6.5, Coop: 6, Willys: 5.5, Hemköp: 7, Lidl: 5 } },
+  "Smör": { unit: "st", prices: { ICA: 65, Coop: 59, Willys: 52, Hemköp: 68, Lidl: 45 } },
+  "Riven ost": { unit: "kg", prices: { ICA: 149, Coop: 139, Willys: 125, Hemköp: 155, Lidl: 109 } },
+  "Broccoli": { unit: "st", prices: { ICA: 25, Coop: 23, Willys: 21, Hemköp: 26, Lidl: 19 } },
+  "Paprika": { unit: "st", prices: { ICA: 15, Coop: 13, Willys: 11, Hemköp: 16, Lidl: 9 } },
+};
+
+const RECIPES = [
+  { name: "Köttfärssås med spagetti", ingredients: [{ name: "Nötfärs", amount: 500, unit: "g" }, { name: "Krossade tomater", amount: 2, unit: "st" }, { name: "Gul lök", amount: 150, unit: "g" }, { name: "Spagetti", amount: 400, unit: "g" }, { name: "Riven ost", amount: 100, unit: "g" }] },
+  { name: "Kycklinggryta med ris", ingredients: [{ name: "Kycklinglårfilé", amount: 600, unit: "g" }, { name: "Ris", amount: 400, unit: "g" }, { name: "Grädde", amount: 250, unit: "ml" }, { name: "Gul lök", amount: 150, unit: "g" }] },
+  { name: "Tacos", ingredients: [{ name: "Nötfärs", amount: 500, unit: "g" }, { name: "Paprika", amount: 1, unit: "st" }, { name: "Gul lök", amount: 100, unit: "g" }, { name: "Riven ost", amount: 100, unit: "g" }] },
+  { name: "Lax med ris och broccoli", ingredients: [{ name: "Laxfilé", amount: 600, unit: "g" }, { name: "Ris", amount: 400, unit: "g" }, { name: "Broccoli", amount: 1, unit: "st" }] },
+];
+
+const state = {
+  people: 2,
+  recipes: [],
+  items: [],
+  markers: {},
+};
+
+const kr = (n) => n.toLocaleString("sv-SE", { maximumFractionDigits: 0 }) + " kr";
+const fmtQty = (qty, unit) => {
+  if (unit === "st") return (qty % 1 === 0 ? qty : qty.toFixed(1)) + " st";
+  if (unit === "kg") return qty < 1 ? Math.round(qty * 1000) + " g" : qty.toFixed(2) + " kg";
+  if (unit === "l") return qty < 1 ? Math.round(qty * 1000) + " ml" : qty.toFixed(2) + " l";
+  return String(qty);
+};
+
+// Initialize map - centered on Karlstad city
+const map = L.map("map").setView([59.3400, 13.5000], 12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap",
+  maxZoom: 19,
+}).addTo(map);
+
+// Create initial markers
+STORES.forEach((store) => {
+  const marker = L.circleMarker([store.lat, store.lng], {
+    radius: 30,
+    fillColor: "#2f6b46",
+    color: "#fff",
+    weight: 3,
+    opacity: 1,
+    fillOpacity: 0.8,
+  }).addTo(map);
+  
+  marker.bindPopup(`<b>${store.chain}</b><br><strong>${store.name}</strong><br><small>${store.address}</small>`);
+  state.markers[store.name] = { marker, store };
+});
+
+function highlightStore(storeName) {
+  // Reset all markers
+  STORES.forEach((store) => {
+    if (state.markers[store.name] && state.markers[store.name].marker) {
+      const marker = state.markers[store.name].marker;
+      marker.setStyle({
+        radius: 30,
+        fillColor: "#2f6b46",
+        color: "#fff",
+        weight: 3,
+        opacity: 1,
+        fillOpacity: 0.8,
+      });
+    }
+  });
+  
+  // Highlight selected store
+  if (state.markers[storeName] && state.markers[storeName].marker) {
+    const marker = state.markers[storeName].marker;
+    marker.setStyle({
+      radius: 40,
+      fillColor: "#ff6b35",
+      color: "#fff",
+      weight: 4,
+      opacity: 1,
+      fillOpacity: 1,
+    });
+    marker.openPopup();
+    map.setView([marker.getLatLng().lat, marker.getLatLng().lng], 14);
+  }
+}
+
+function computeTotals() {
+  const totals = {};
+  STORES.forEach((s) => { totals[s.name] = 0; });
+
+  state.recipes.forEach((recipe) => {
+    recipe.ingredients.forEach((ing) => {
+      const factor = state.people / 4;
+      const qty = (ing.unit === "g" || ing.unit === "ml" ? ing.amount / 1000 : ing.amount) * factor;
+      
+      STORES.forEach((store) => {
+        if (INGREDIENTS[ing.name]) {
+          const price = INGREDIENTS[ing.name].prices[store.chain] || 0;
+          totals[store.name] += qty * price;
+        }
+      });
+    });
+  });
+
+  state.items.forEach((item) => {
+    STORES.forEach((store) => {
+      totals[store.name] += item.prices[store.chain] || 0;
+    });
+  });
+
+  return totals;
+}
+
+function updateMarkers() {
+  const totals = computeTotals();
+  
+  // Create array with store info and totals
+  const sortedStores = STORES.map((store) => ({
+    ...store,
+    total: totals[store.name] || 0,
+  })).sort((a, b) => a.total - b.total);
+
+  // Update markers with rank numbers
+  sortedStores.forEach((store, idx) => {
+    if (state.markers[store.name] && state.markers[store.name].marker) {
+      const marker = state.markers[store.name].marker;
+      const rank = idx + 1;
+      
+      // Update popup with price info
+      marker.setPopupContent(`<b>${store.chain} - Rank #${rank}</b><br><strong>${store.name}</strong><br><small>${store.address}</small><br><strong style="color: #2f6b46; font-size: 16px;">${kr(store.total)}</strong>`);
+    }
+  });
+
+  // Update price list
+  const priceListElement = document.getElementById("price-list");
+  const hasItems = state.recipes.length > 0 || state.items.length > 0;
+  
+  if (hasItems) {
+    const priceHtml = sortedStores.map((store, idx) => `
+      <div class="store-price" data-store-name="${store.name}" style="cursor: pointer; transition: background 0.2s;">
+        <div class="rank">${idx + 1}</div>
+        <div class="name"><strong>${store.chain}</strong><br><small>${store.name}</small></div>
+        <div class="price">${kr(store.total)}</div>
+      </div>
+    `).join("");
+    priceListElement.innerHTML = priceHtml;
+    
+    // Add click handlers to price items
+    document.querySelectorAll('[data-store-name]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        const storeName = el.dataset.storeName;
+        highlightStore(storeName);
+      });
+      el.addEventListener('mouseenter', () => {
+        el.style.background = '#f0f8f4';
+      });
+      el.addEventListener('mouseleave', () => {
+        el.style.background = '';
+      });
+    });
+  } else {
+    priceListElement.innerHTML = "<div style='color: #85806f; font-size: 12px;'>Lägg till rätt eller vara för att se priser</div>";
+  }
+  
+  updateShoppingList();
+}
+
+function updateShoppingList() {
+  let html = "";
+  const aggregated = {};
+  
+  state.recipes.forEach((recipe) => {
+    recipe.ingredients.forEach((ing) => {
+      const factor = state.people / 4;
+      const qty = (ing.unit === "g" || ing.unit === "ml" ? ing.amount / 1000 : ing.amount) * factor;
+      if (!aggregated[ing.name]) aggregated[ing.name] = { qty: 0, unit: ing.unit };
+      aggregated[ing.name].qty += qty;
+    });
+  });
+
+  Object.entries(aggregated).forEach(([name, v]) => {
+    html += `<div style="padding: 4px 0; border-bottom: 1px solid #efece1; display: flex; justify-content: space-between;"><span>${name}</span><span class="mono">${fmtQty(v.qty, v.unit)}</span></div>`;
+  });
+
+  document.getElementById("shopping-list").innerHTML = html || "<div style='color: #85806f;'>Tom</div>";
+}
+
+function updateUI() {
+  document.getElementById("people-count").textContent = state.people;
+  
+  let recipesHtml = state.recipes.map((r) => `<div style="padding: 6px; background: #f1efe7; border-radius: 4px; display: flex; justify-content: space-between;">
+    <span>${r.name}</span>
+    <button class="secondary" style="padding: 2px 6px; font-size: 11px;" data-action="remove-recipe" data-recipe="${r.name}">✕</button>
+  </div>`).join("");
+  document.getElementById("recipes-list").innerHTML = recipesHtml || "<div style='color: #85806f; font-size: 12px;'>Ingen rätt planerad</div>";
+
+  let itemsHtml = state.items.map((i) => `<div style="padding: 6px; background: #f1efe7; border-radius: 4px; display: flex; justify-content: space-between;">
+    <span>${i.name}</span>
+    <button class="secondary" style="padding: 2px 6px; font-size: 11px;" data-action="remove-item" data-item="${i.name}">✕</button>
+  </div>`).join("");
+  document.getElementById("items-list").innerHTML = itemsHtml || "<div style='color: #85806f; font-size: 12px;'>Ingen vara tillagd</div>";
+
+  updateMarkers();
+}
+
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  
+  if (el.dataset.action === "people-inc") {
+    state.people = Math.min(8, state.people + 1);
+    updateUI();
+  } else if (el.dataset.action === "people-dec") {
+    state.people = Math.max(1, state.people - 1);
+    updateUI();
+  } else if (el.dataset.action === "toggle-recipes") {
+    document.getElementById("recipe-modal").style.display = "block";
+    const optionsHtml = RECIPES.map((r) => `<button style="text-align: left; display: block; width: 100%; padding: 10px;" data-action="add-recipe" data-recipe="${r.name}">${r.name}</button>`).join("");
+    document.getElementById("recipe-options").innerHTML = optionsHtml;
+  } else if (el.dataset.action === "add-recipe") {
+    const recipeName = el.dataset.recipe;
+    if (!state.recipes.find((r) => r.name === recipeName)) {
+      const recipe = RECIPES.find((r) => r.name === recipeName);
+      state.recipes.push(recipe);
+      updateUI();
+    }
+    document.getElementById("recipe-modal").style.display = "none";
+  } else if (el.dataset.action === "remove-recipe") {
+    state.recipes = state.recipes.filter((r) => r.name !== el.dataset.recipe);
+    updateUI();
+  } else if (el.dataset.action === "toggle-items") {
+    document.getElementById("item-modal").style.display = "block";
+  } else if (el.dataset.action === "save-item") {
+    const name = document.getElementById("new-item-name").value.trim();
+    const store = document.getElementById("new-item-store").value;
+    const price = parseFloat(document.getElementById("new-item-price").value) || 0;
+    
+    if (name) {
+      const prices = { ICA: 0, Coop: 0, Willys: 0, Hemköp: 0, Lidl: 0 };
+      prices[store] = price;
+      state.items.push({ name, prices });
+      document.getElementById("new-item-name").value = "";
+      document.getElementById("new-item-price").value = "";
+      document.getElementById("item-modal").style.display = "none";
+      updateUI();
+    }
+  } else if (el.dataset.action === "remove-item") {
+    state.items = state.items.filter((i) => i.name !== el.dataset.item);
+    updateUI();
+  } else if (el.dataset.action === "close-modal") {
+    document.getElementById("recipe-modal").style.display = "none";
+    document.getElementById("item-modal").style.display = "none";
+  }
+});
+
+updateUI();
+</script>
+</body>
+</html>
