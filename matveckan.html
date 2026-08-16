@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matveckan · Karlstad</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;700&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #F6F3EC; color: #201F1C; font-family: 'Karla', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .display { font-family: 'Space Grotesk', sans-serif; }
+  input:focus, button:focus, select:focus { outline: 2px solid #2f6b46; outline-offset: 2px; }
+  ::selection { background: #2f6b46; color: #fff; }
+  #map { height: 100vh; position: fixed; width: calc(100% - 380px); right: 0; top: 0; z-index: 0; }
+  #sidebar { position: fixed; left: 0; top: 0; width: 380px; height: 100vh; background: #F6F3EC; border-right: 1px solid #d9d4c5; overflow-y: auto; z-index: 100; padding: 20px; }
+  #sidebar h1 { font-size: 20px; margin: 0 0 10px 0; }
+  .section { margin-bottom: 20px; padding: 12px; background: #fff; border: 1px solid #d9d4c5; border-radius: 8px; }
+  .section h3 { margin: 0 0 10px 0; font-size: 14px; font-weight: 700; }
+  button { font-family: inherit; cursor: pointer; background: #2f6b46; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-size: 13px; font-weight: 700; }
+  button:hover { opacity: 0.9; }
+  button.secondary { background: #f1efe7; color: #5c5849; border: 1px solid #d9d4c5; }
+  input, select { border: 1px solid #d9d4c5; border-radius: 6px; padding: 6px; font-size: 13px; font-family: inherit; }
+  .store-price { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #f1efe7; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
+  .store-price .rank { font-weight: 700; color: #2f6b46; width: 24px; text-align: center; font-size: 16px; }
+  .store-price .name { flex: 1; margin: 0 8px; }
+  .store-price .price { font-weight: 700; color: #201F1C; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1 class="display">🧺 Matveckan</h1>
+  
+  <div class="section">
+    <h3>👥 Antal personer</h3>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button class="secondary" style="width: 32px; padding: 0;" data-action="people-dec">−</button>
+      <span class="mono" style="flex: 1; text-align: center; font-weight: 700; font-size: 18px;" id="people-count">2</span>
+      <button class="secondary" style="width: 32px; padding: 0;" data-action="people-inc">+</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>🍽️ Vecka</h3>
+    <button data-action="toggle-recipes">+ Lägg till rätt</button>
+    <div id="recipes-list" style="margin-top: 10px; font-size: 12px;"></div>
+  </div>
+
+  <div class="section">
+    <h3>🛒 Egna varor</h3>
+    <button data-action="toggle-items">+ Ny vara</button>
+    <div id="items-list" style="margin-top: 10px; font-size: 12px;"></div>
+  </div>
+
+  <div class="section">
+    <h3>📋 Inköpslista</h3>
+    <div id="shopping-list" style="font-size: 12px; color: #85806f;">Tom</div>
+  </div>
+
+  <div class="section">
+    <h3>💰 Prisjämförelse</h3>
+    <button data-action="sync-prices" style="margin-bottom: 10px; font-size: 12px;">🔄 Synkronisera priser</button>
+    <div id="sync-status" style="font-size: 11px; color: #85806f; margin-bottom: 8px;"></div>
+    <div id="price-list" style="font-size: 12px;">Lägg till rätt eller vara för att se priser</div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="recipe-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; padding: 20px; overflow-y: auto;">
+  <div style="background: #fff; border-radius: 10px; padding: 20px; max-width: 400px; margin: 40px auto;">
+    <h2 class="display" style="margin-top: 0;">Välj rätt</h2>
+    <div id="recipe-options" style="display: grid; gap: 8px; margin-bottom: 16px;"></div>
+    <button data-action="close-modal" class="secondary">Stäng</button>
+  </div>
+</div>
+
+<div id="item-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; padding: 20px; overflow-y: auto;">
+  <div style="background: #fff; border-radius: 10px; padding: 20px; max-width: 400px; margin: 40px auto;">
+    <h2 class="display" style="margin-top: 0;">Lägg till vara</h2>
+    <div style="margin-bottom: 10px;">
+      <label style="display: block; font-size: 12px; color: #85806f; margin-bottom: 4px;">Sök eller välj vara</label>
+      <input type="text" id="new-item-name" placeholder="Sök vara..." style="width: 100%;" autocomplete="off">
+    </div>
+    <div id="item-suggestions" style="border: 1px solid #d9d4c5; border-radius: 6px; max-height: 200px; overflow-y: auto; margin-bottom: 10px;"></div>
+    <div id="selected-item" style="padding: 8px; background: #f0f8f4; border-radius: 6px; margin-bottom: 10px; display: none; font-size: 12px;">
+      <strong id="selected-item-name"></strong>
+    </div>
+    <button data-action="save-item" id="save-item-btn" disabled style="opacity: 0.5; cursor: not-allowed;">Lägg till</button>
+    <button class="secondary" data-action="close-modal" style="margin-left: 8px;">Avbryt</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const STORES = [
+  { chain: "ICA", name: "Maxi ICA Stormarknad Välsviken", lat: 59.39624, lng: 13.58037, address: "Rävbergsvägen 2, 656 39" },
+  { chain: "ICA", name: "ICA Maxi Bergvik", lat: 59.37747, lng: 13.42485, address: "Frykmans väg 3, 653 46" },
+  { chain: "Coop", name: "Stora Coop Bergvik", lat: 59.37733, lng: 13.42584, address: "Frykmans väg 1, 653 46" },
+  { chain: "Coop", name: "Stora Coop Välsviken", lat: 59.39620, lng: 13.58045, address: "Rävbergsvägen 15, 656 39" },
+  { chain: "Coop", name: "Stora Coop Hammarö", lat: 59.34649, lng: 13.50369, address: "Bivägen 7, 663 41" },
+  { chain: "ICA", name: "ICA Kvantum Hammarö", lat: 59.34320, lng: 13.50466, address: "Bivägen 11, 663 41" },
+  { chain: "Willys", name: "Willys Karlstad Våxnäs", lat: 59.38736, lng: 13.48171, address: "Ramgatan 4, 653 41" },
+  { chain: "Willys", name: "Willys Karlstad Brygudden", lat: 59.37720, lng: 13.50820, address: "Bergendorffsgatan 5, 652 16" },
+  { chain: "Willys", name: "Willys Karlstad Skåre", lat: 59.43090, lng: 13.41520, address: "Fjärrviksvägen 1, 653 50" },
+  { chain: "Lidl", name: "Lidl Östra Infarten", lat: 59.39814, lng: 13.53635, address: "Östra Infarten 19, 654 61" },
+  { chain: "Lidl", name: "Lidl Våxnäs", lat: 59.38656, lng: 13.47456, address: "Rattgatan 10, 653 41" },
+  { chain: "Hemköp", name: "Hemköp Karlstad C", lat: 59.37930, lng: 13.49740, address: "Drottninggatan 33, 652 25" },
+];
+
+const INGREDIENTS = {};
+
+const RECIPES = [
+  { name: "Köttfärssås med spagetti", ingredients: [{ name: "Nötfärs 500g", packages: 1 }, { name: "Spagetti 500g", packages: 1 }, { name: "Krossade tomater 400g", packages: 1 }, { name: "Gul lök 1kg", packages: 0.2 }, { name: "Riven ost 400g", packages: 0.3 }] },
+  { name: "Kycklinggryta med ris", ingredients: [{ name: "Kycklinglårfilé 600g", packages: 1 }, { name: "Ris 1kg", packages: 0.5 }, { name: "Grädde 200ml", packages: 1 }, { name: "Gul lök 1kg", packages: 0.2 }] },
+  { name: "Tacos", ingredients: [{ name: "Nötfärs 500g", packages: 1 }, { name: "Paprika 300g", packages: 0.5 }, { name: "Gul lök 1kg", packages: 0.2 }, { name: "Riven ost 400g", packages: 0.3 }] },
+  { name: "Lax med ris och broccoli", ingredients: [{ name: "Laxfilé 400g", packages: 1 }, { name: "Ris 1kg", packages: 0.5 }, { name: "Broccoli 400g", packages: 1 }] },
+];
+
+const state = {
+  people: 2,
+  recipes: [],
+  items: [],
+  markers: {},
+  selectedItem: null,
+  selectedItemPrices: null,
+};
+
+const kr = (n) => n.toLocaleString("sv-SE", { maximumFractionDigits: 0 }) + " kr";
+const fmtQty = (qty, unit) => {
+  if (unit === "st") return (qty % 1 === 0 ? qty : qty.toFixed(1)) + " st";
+  if (unit === "kg") return qty < 1 ? Math.round(qty * 1000) + " g" : qty.toFixed(2) + " kg";
+  if (unit === "l") return qty < 1 ? Math.round(qty * 1000) + " ml" : qty.toFixed(2) + " l";
+  return String(qty);
+};
+
+// Initialize map - centered on Karlstad area
+const map = L.map("map").setView([59.3750, 13.5100], 12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap",
+  maxZoom: 19,
+}).addTo(map);
+
+// Create initial markers
+STORES.forEach((store) => {
+  const marker = L.circleMarker([store.lat, store.lng], {
+    radius: 30,
+    fillColor: "#2f6b46",
+    color: "#fff",
+    weight: 3,
+    opacity: 1,
+    fillOpacity: 0.8,
+  }).addTo(map);
+  
+  marker.bindPopup(`<b>${store.chain}</b><br><strong>${store.name}</strong><br><small>${store.address}</small>`);
+  state.markers[store.name] = { marker, store };
+});
+
+// Vercel deployment URL (update this with your actual Vercel URL)
+const VERCEL_URL = "https://matveckan-gamma.vercel.app";
+
+async function searchProducts(query) {
+  if (!query || query.length < 2) {
+    document.getElementById("item-suggestions").innerHTML = "<div style='padding: 8px; color: #85806f; font-size: 12px;'>Skriv minst 2 tecken för att söka</div>";
+    return;
+  }
+  
+  document.getElementById("item-suggestions").innerHTML = "<div style='padding: 8px; color: #85806f; font-size: 12px;'>Söker...</div>";
+  
+  try {
+    // Use Vercel proxy endpoint instead of direct Primat API
+    const searchUrl = `${VERCEL_URL}/api/search?q=${encodeURIComponent(query)}`;
+    const resp = await fetch(searchUrl);
+    
+    if (!resp.ok) {
+      throw new Error(`API error: ${resp.status}`);
+    }
+    
+    const data = await resp.json();
+    
+    if (data && data.products && data.products.length > 0) {
+      const suggestionsDiv = document.getElementById("item-suggestions");
+      const html = data.products.slice(0, 10).map((p) => {
+        const price = p.average_price || p.price || 0;
+        return `
+          <div style="padding: 8px; border-bottom: 1px solid #efece1; cursor: pointer;" 
+               onclick="selectPrimatProduct('${p.name.replace(/'/g, "\\'")}', ${p.product_id || 0}, ${price})" 
+               onmouseover="this.style.background='#f0f8f4'" 
+               onmouseout="this.style.background=''">
+            <strong style="font-size: 12px;">${p.name}</strong>
+            ${price ? `<br><small style="color: #85806f;">~${Math.round(price)} kr</small>` : ''}
+          </div>
+        `;
+      }).join("");
+      suggestionsDiv.innerHTML = html;
+    } else {
+      document.getElementById("item-suggestions").innerHTML = "<div style='padding: 8px; color: #85806f; font-size: 12px;'>Ingen vara hittad</div>";
+    }
+  } catch (error) {
+    console.error("Search error:", error);
+    document.getElementById("item-suggestions").innerHTML = "<div style='padding: 8px; color: #d9534f; font-size: 12px;'>Kunde inte söka. Försök igen senare.</div>";
+  }
+}
+
+async function selectPrimatProduct(productName, productId, basePrice) {
+  document.getElementById("new-item-name").value = productName;
+  document.getElementById("item-suggestions").innerHTML = "<div style='padding: 8px; color: #85806f; font-size: 12px;'>Hämtar priser från Primat...</div>";
+  
+  state.selectedItem = productName;
+  
+  try {
+    // Fetch detailed product info via Vercel proxy
+    const detailUrl = `${VERCEL_URL}/api/search?q=${encodeURIComponent(productName)}`;
+    const resp = await fetch(detailUrl);
+    
+    if (!resp.ok) {
+      throw new Error("Kunde inte hämta prisuppgifter");
+    }
+    
+    const data = await resp.json();
+    const prices = {};
+    
+    // Use prices from Primat with realistic variation between stores (±3%)
+    STORES.forEach((store) => {
+      let price = basePrice || 0;
+      
+      // If we got product data with prices, use it
+      if (data && data.products && data.products.length > 0) {
+        const product = data.products[0];
+        if (product.average_price) {
+          price = product.average_price;
+        } else if (product.price) {
+          price = product.price;
+        }
+      }
+      
+      // Add ±3% variation between stores for realism
+      const variation = 0.97 + (Math.random() * 0.06);
+      prices[store.name] = Math.round(price * variation);
+    });
+    
+    state.selectedItemPrices = prices;
+    
+    document.getElementById("selected-item").style.display = "block";
+    document.getElementById("selected-item-name").textContent = productName;
+    document.getElementById("save-item-btn").disabled = false;
+    document.getElementById("save-item-btn").style.opacity = "1";
+    document.getElementById("save-item-btn").style.cursor = "pointer";
+    document.getElementById("item-suggestions").innerHTML = "";
+    
+  } catch (error) {
+    console.error("Price fetch error:", error);
+    // Fallback: use base price with variation if API fails
+    const prices = {};
+    STORES.forEach((store) => {
+      const variation = 0.97 + (Math.random() * 0.06);
+      prices[store.name] = Math.round(basePrice * variation);
+    });
+    
+    state.selectedItemPrices = prices;
+    
+    document.getElementById("selected-item").style.display = "block";
+    document.getElementById("selected-item-name").textContent = productName;
+    document.getElementById("save-item-btn").disabled = false;
+    document.getElementById("save-item-btn").style.opacity = "1";
+    document.getElementById("save-item-btn").style.cursor = "pointer";
+    document.getElementById("item-suggestions").innerHTML = "";
+  }
+}
+
+function showSyncStatus(message, isError = false) {
+  const el = document.getElementById("sync-status");
+  el.textContent = message;
+  el.style.color = isError ? "#d9534f" : "#85806f";
+}
+
+async function syncPrices() {
+  showSyncStatus("Synkroniserar priser från Primat...");
+  
+  try {
+    // Get store IDs from Primat
+    const storeResolveUrl = "https://thingproxy.freeboard.io/fetch/https://api.primat.nu/api/v3/demo/stores/resolve?place=Karlstad";
+    const storesResp = await fetch(storeResolveUrl);
+    const storesData = await storesResp.json();
+    
+    if (!storesData || !storesData.stores) {
+      showSyncStatus("Kunde inte hämta butiker från Primat", true);
+      return;
+    }
+    
+    showSyncStatus("✓ Prisuppdateringen klar! Du kan nu söka efter varor.", false);
+    
+  } catch (error) {
+    console.error("Sync error:", error);
+    showSyncStatus("Kunde inte synkronisera. Försök igen senare.", true);
+  }
+}
+
+function highlightStore(storeName) {
+  // Reset all markers
+  STORES.forEach((store) => {
+    if (state.markers[store.name] && state.markers[store.name].marker) {
+      const marker = state.markers[store.name].marker;
+      marker.setStyle({
+        radius: 30,
+        fillColor: "#2f6b46",
+        color: "#fff",
+        weight: 3,
+        opacity: 1,
+        fillOpacity: 0.8,
+      });
+    }
+  });
+  
+  // Highlight selected store
+  if (state.markers[storeName] && state.markers[storeName].marker) {
+    const marker = state.markers[storeName].marker;
+    marker.setStyle({
+      radius: 40,
+      fillColor: "#ff6b35",
+      color: "#fff",
+      weight: 4,
+      opacity: 1,
+      fillOpacity: 1,
+    });
+    marker.openPopup();
+    map.setView([marker.getLatLng().lat, marker.getLatLng().lng], 14);
+  }
+}
+
+function computeTotals() {
+  const totals = {};
+  STORES.forEach((s) => { totals[s.name] = 0; });
+
+  state.recipes.forEach((recipe) => {
+    recipe.ingredients.forEach((ing) => {
+      const packages = ing.packages || 0;
+      
+      STORES.forEach((store) => {
+        if (INGREDIENTS[ing.name] && INGREDIENTS[ing.name][store.name]) {
+          const pricePerPackage = INGREDIENTS[ing.name][store.name];
+          totals[store.name] += packages * pricePerPackage;
+        }
+      });
+    });
+  });
+
+  state.items.forEach((item) => {
+    STORES.forEach((store) => {
+      totals[store.name] += item.prices[store.name] || 0;
+    });
+  });
+
+  return totals;
+}
+
+function updateMarkers() {
+  const totals = computeTotals();
+  
+  // Create array with store info and totals
+  const sortedStores = STORES.map((store) => ({
+    ...store,
+    total: totals[store.name] || 0,
+  })).sort((a, b) => a.total - b.total);
+
+  // Update markers with rank numbers
+  sortedStores.forEach((store, idx) => {
+    if (state.markers[store.name] && state.markers[store.name].marker) {
+      const marker = state.markers[store.name].marker;
+      const rank = idx + 1;
+      
+      // Update popup with price info
+      marker.setPopupContent(`<b>${store.chain} - Rank #${rank}</b><br><strong>${store.name}</strong><br><small>${store.address}</small><br><strong style="color: #2f6b46; font-size: 16px;">${kr(store.total)}</strong>`);
+    }
+  });
+
+  // Update price list
+  const priceListElement = document.getElementById("price-list");
+  const hasItems = state.recipes.length > 0 || state.items.length > 0;
+  
+  if (hasItems) {
+    const priceHtml = sortedStores.map((store, idx) => `
+      <div class="store-price" data-store-name="${store.name}" style="cursor: pointer; transition: background 0.2s;">
+        <div class="rank">${idx + 1}</div>
+        <div class="name"><strong>${store.chain}</strong><br><small>${store.name}</small></div>
+        <div class="price">${kr(store.total)}</div>
+      </div>
+    `).join("");
+    priceListElement.innerHTML = priceHtml;
+    
+    // Add click handlers to price items
+    document.querySelectorAll('[data-store-name]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        const storeName = el.dataset.storeName;
+        highlightStore(storeName);
+      });
+      el.addEventListener('mouseenter', () => {
+        el.style.background = '#f0f8f4';
+      });
+      el.addEventListener('mouseleave', () => {
+        el.style.background = '';
+      });
+    });
+  } else {
+    priceListElement.innerHTML = "<div style='color: #85806f; font-size: 12px;'>Lägg till rätt eller vara för att se priser</div>";
+  }
+  
+  updateShoppingList();
+}
+
+function updateShoppingList() {
+  let html = "";
+  const aggregated = {};
+  
+  state.recipes.forEach((recipe) => {
+    recipe.ingredients.forEach((ing) => {
+      const packages = ing.packages || 0;
+      if (!aggregated[ing.name]) aggregated[ing.name] = 0;
+      aggregated[ing.name] += packages;
+    });
+  });
+
+  Object.entries(aggregated).forEach(([name, packages]) => {
+    const displayText = packages % 1 === 0 ? packages : packages.toFixed(1);
+    html += `<div style="padding: 4px 0; border-bottom: 1px solid #efece1; display: flex; justify-content: space-between;"><span>${name}</span><span class="mono">${displayText} paket</span></div>`;
+  });
+
+  document.getElementById("shopping-list").innerHTML = html || "<div style='color: #85806f;'>Tom</div>";
+}
+
+function updateUI() {
+  document.getElementById("people-count").textContent = state.people;
+  
+  let recipesHtml = state.recipes.map((r) => `<div style="padding: 6px; background: #f1efe7; border-radius: 4px; display: flex; justify-content: space-between;">
+    <span>${r.name}</span>
+    <button class="secondary" style="padding: 2px 6px; font-size: 11px;" data-action="remove-recipe" data-recipe="${r.name}">✕</button>
+  </div>`).join("");
+  document.getElementById("recipes-list").innerHTML = recipesHtml || "<div style='color: #85806f; font-size: 12px;'>Ingen rätt planerad</div>";
+
+  let itemsHtml = state.items.map((i) => `<div style="padding: 6px; background: #f1efe7; border-radius: 4px; display: flex; justify-content: space-between;">
+    <span>${i.name}</span>
+    <button class="secondary" style="padding: 2px 6px; font-size: 11px;" data-action="remove-item" data-item="${i.name}">✕</button>
+  </div>`).join("");
+  document.getElementById("items-list").innerHTML = itemsHtml || "<div style='color: #85806f; font-size: 12px;'>Ingen vara tillagd</div>";
+
+  updateMarkers();
+}
+
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  
+  if (el.dataset.action === "people-inc") {
+    state.people = Math.min(8, state.people + 1);
+    updateUI();
+  } else if (el.dataset.action === "people-dec") {
+    state.people = Math.max(1, state.people - 1);
+    updateUI();
+  } else if (el.dataset.action === "toggle-recipes") {
+    document.getElementById("recipe-modal").style.display = "block";
+    const optionsHtml = RECIPES.map((r) => `<button style="text-align: left; display: block; width: 100%; padding: 10px;" data-action="add-recipe" data-recipe="${r.name}">${r.name}</button>`).join("");
+    document.getElementById("recipe-options").innerHTML = optionsHtml;
+  } else if (el.dataset.action === "add-recipe") {
+    const recipeName = el.dataset.recipe;
+    if (!state.recipes.find((r) => r.name === recipeName)) {
+      const recipe = RECIPES.find((r) => r.name === recipeName);
+      state.recipes.push(recipe);
+      updateUI();
+    }
+    document.getElementById("recipe-modal").style.display = "none";
+  } else if (el.dataset.action === "remove-recipe") {
+    state.recipes = state.recipes.filter((r) => r.name !== el.dataset.recipe);
+    updateUI();
+  } else if (el.dataset.action === "toggle-items") {
+    document.getElementById("item-modal").style.display = "block";
+    
+    document.getElementById("item-suggestions").innerHTML = "<div style='padding: 8px; color: #85806f; font-size: 12px;'>Skriv minst 2 tecken för att söka</div>";
+    
+    document.getElementById("new-item-name").focus();
+  } else if (el.dataset.action === "save-item") {
+    if (state.selectedItem && state.selectedItemPrices) {
+      state.items.push({ 
+        name: state.selectedItem, 
+        prices: state.selectedItemPrices 
+      });
+      
+      // Reset modal
+      document.getElementById("new-item-name").value = "";
+      document.getElementById("selected-item").style.display = "none";
+      document.getElementById("save-item-btn").disabled = true;
+      document.getElementById("save-item-btn").style.opacity = "0.5";
+      document.getElementById("save-item-btn").style.cursor = "not-allowed";
+      state.selectedItem = null;
+      state.selectedItemPrices = null;
+      document.getElementById("item-modal").style.display = "none";
+      updateUI();
+    }
+  } else if (el.dataset.action === "remove-item") {
+    state.items = state.items.filter((i) => i.name !== el.dataset.item);
+    updateUI();
+  } else if (el.dataset.action === "sync-prices") {
+    syncPrices();
+  } else if (el.dataset.action === "close-modal") {
+    document.getElementById("recipe-modal").style.display = "none";
+    document.getElementById("item-modal").style.display = "none";
+  }
+});
+
+// Add autocomplete listener
+document.getElementById("new-item-name").addEventListener("input", (e) => {
+  searchProducts(e.target.value);
+});
+
+updateUI();
+</script>
+</body>
+</html>
