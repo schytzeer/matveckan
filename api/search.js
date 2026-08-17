@@ -13,21 +13,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Query must be at least 2 characters' });
   }
 
-  const apiKey = process.env.PRIMAT_API_KEY;
-
-  if (!apiKey) {
-    console.error('PRIMAT_API_KEY not configured');
-    return res.status(500).json({ error: 'API key not configured' });
-  }
-
   try {
-    const url = `https://api.primat.nu/api/v3/products?q=${encodeURIComponent(q)}&apikey=${apiKey}`;
-    console.log('Fetching from:', url);
+    const url = `https://primat.nu/api/v3/demo/products?q=${encodeURIComponent(q)}`;
     
     const response = await fetch(url);
 
     if (!response.ok) {
-      console.error('Primat API error:', response.status, response.statusText);
       return res.status(response.status).json({ error: `Primat API error: ${response.status}` });
     }
 
